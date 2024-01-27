@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This project was part of my [python-weather](https://github.com/james-wukong/python-weather) project, but I think it would be more clear to create a new repository for weather forecasting in tornto. The main purpose of this project is to have some in-hand practises in deep learning and tensorflow framework.
+This project was part of my [python-weather](https://github.com/james-wukong/python-weather) project, but I think it would be clear to create a new repository for weather forecasting in Toronto. The main purpose of this project is to have some in-hand practises in deep learning and tensorflow framework.
 
 ## Dataset
 
