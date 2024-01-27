@@ -22,7 +22,9 @@ It uses weather data in previous days to forecasting the weather conditions in t
 4. feature engineer: create new features based on the current features, such as 'week of year'
 5. create data sequences based on the timestamps and forecast steps
 6. split dataset into training, validation and testing datasets
+7. all datasets are batched, and only training dataset is shuffled after batching
 6. train the model in LSTM neural networks
+7. callbacks are used to early stop when loss is not improved anymore
 7. evaluate by comparing loss in training and validation processes
 8. evaluate by testing dataset predictions
 9. fine turning hyperparameters to get a better result
