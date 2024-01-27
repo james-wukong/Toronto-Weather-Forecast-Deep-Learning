@@ -2,8 +2,17 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# By Author
 .idea/
 data/*
+test.py
+*.log
+.DS_Store
+*.csv
+*.ipynb
+
+
 # C extensions
 *.so
 
