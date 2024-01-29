@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 import tensorflow as tf
 from abc import ABC, abstractmethod
 from sklearn.preprocessing import MultiLabelBinarizer, OneHotEncoder, LabelEncoder
@@ -53,15 +54,16 @@ class WeatherData:
         plt.show()
 
     @staticmethod
-    def display_actural_predict(y_test, predictions) -> None:
+    def plot_test_predictions(y_test, y_test_hat, title='Test Predictions'):
         """
-        Plot actual vs predicted values
+        Plot the test prediction
         """
-        # Plot actual vs predicted values
-        plt.scatter(y_test, predictions)
-        plt.xlabel('Actual Values')
-        plt.ylabel('Predicted Values')
-        plt.title('Actual vs Predicted Values on Test Set')
+        plt.plot(y_test, label='True Values', marker='.')
+        plt.plot(y_test_hat, label='Predicted Values', marker='.')
+        plt.title(title)
+        plt.xlabel('Time Steps')
+        plt.ylabel('Original Values')  # Adjust based on your data scaling
+        plt.legend()
         plt.show()
 
     @staticmethod
@@ -186,7 +188,14 @@ class BaseBuilder(ABC):
     def split_sequence(self, data: pd.DataFrame,
                        input_win_size: int,
                        output_win_size: int,
-                       label_columns: tuple = None) -> tuple[np.array, np.array]:
+                       label_columns: defaultdict = None) -> tuple[np.array, np.array]:
+        pass
+
+    @abstractmethod
+    def inverse_label_sequence(self, data: tuple,
+                               input_win_size: int,
+                               output_win_size: int,
+                               label_columns: tuple = None) -> pd.DataFrame:
         pass
 
     @abstractmethod
@@ -196,7 +205,7 @@ class BaseBuilder(ABC):
                           train_size: float,
                           validate_size: float,
                           batch_size: int,
-                          label_columns: tuple = None) -> tuple:
+                          label_columns: defaultdict = None) -> tuple:
         pass
 
 
@@ -206,6 +215,7 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
     specific implementations of the building steps. Your program may have
     several variations of Builders, implemented differently.
     """
+
     def __init__(self, df: pd.DataFrame = None) -> None:
         """
         A fresh builder instance should contain a blank product object, which is
@@ -214,6 +224,9 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         self._weather = WeatherData(df)
         # self.reset()
         self.scaler = MinMaxScaler()
+        self.y_test_reg_ds = None
+        self.y_test_cls_ds = None
+        self.dataset = None
 
     # def reset(self) -> None:
     #     self._weather = WeatherData(self._df)
@@ -536,9 +549,9 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
     def split_sequence(self, data: pd.DataFrame,
                        input_win_size: int,
                        output_win_size: int,
-                       label_columns: tuple = None) -> tuple[np.array, np.array]:
+                       label_columns: defaultdict = None) -> tuple[np.array, np.array, np.array]:
         """
-        split data into training, validation, and test sets
+        split data into feature sequences and label sequences with time steps
         Args:
             data: DataFrame, input data
             label_columns: tuple, contain features to be list
@@ -546,35 +559,65 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
             output_win_size:  # Predict weather for the next 3 days -> 3 * 24
 
         Returns:
-
+            tuple(sequences, regression labels, classification labels)
         """
-        sequences, labels = [], []
-        for i in range(len(self.weather.df) - input_win_size - output_win_size - 1):
-            seq = self.weather.df.iloc[i:i + input_win_size, :].values
+        sequences, labels_reg, labels_cls = [], [], []
+        for i in range(len(data) - input_win_size - output_win_size + 1):
+            seq = data.iloc[i:i + input_win_size, :].values
             if label_columns is None:
-                label = self.weather.df.iloc[i + input_win_size:i + input_win_size + output_win_size, :].values
+                label_reg = data.iloc[i + input_win_size:i + input_win_size + output_win_size, :].values
+                label_cls = data.iloc[i + input_win_size:i + input_win_size + output_win_size, :].values
             else:
-                label = (self.weather.df.iloc[i + input_win_size:i + input_win_size + output_win_size,
-                         self.weather.df.columns.get_indexer(label_columns)]
-                         .values)
+                label_reg = (data.iloc[i + input_win_size:i + input_win_size + output_win_size,
+                             data.columns.get_indexer(label_columns['reg'])].values)
+                label_cls = (data.iloc[i + input_win_size:i + input_win_size + output_win_size,
+                             data.columns.get_indexer(label_columns['cls'])].values)
 
             sequences.append(seq)
-            labels.append(label)
+            labels_reg.append(label_reg)
+            labels_cls.append(label_cls)
 
-        return np.array(sequences), np.array(labels)
+        return np.array(sequences), np.array(labels_reg), np.array(labels_cls)
+
+    def inverse_label_sequence(self, y_data_hat: np.array,
+                               input_win_size: int,
+                               output_win_size: int,
+                               label_columns: tuple = None) -> pd.DataFrame:
+        """
+        inverse split sequence and generate an original dataset
+        Args:
+            y_data_hat: np.array, input data
+            label_columns: tuple, contain features to be list
+            input_win_size: # 5 days of hourly observations -> 5 * 24
+            output_win_size:  # Predict weather for the next 3 days -> 3 * 24
+
+        Returns:
+        """
+        result = pd.DataFrame()
+        for idx, labels in enumerate(y_data_hat):
+            print('printing labels: ', labels.shape, type(labels))
+            if idx == 0:
+                a = pd.DataFrame(labels[:, :], columns=label_columns)
+                # result.append(labels[:, :], columns=label_columns, ignore_index=True, inplace=True)
+            else:
+                a = pd.DataFrame([labels[-1][:]], columns=label_columns)
+                # result.append([labels[-1][:]], columns=label_columns)
+            result = pd.concat([result, a], ignore_index=True)
+
+        return result
 
     def create_train_test(self, input_win_size: int,
                           output_win_size: int,
                           train_size: float = 0.8,
                           validate_size: float = 0.1,
                           batch_size: int = 24 * 30,
-                          label_columns: tuple = None) -> tuple:
+                          label_columns: defaultdict = None) -> tuple:
         """
         create train test dataset
         Args:
-            label_columns:
-            input_win_size:
-            output_win_size:
+            label_columns: dict {'regression': (), 'classification': ()}
+            input_win_size: int, n_step_in
+            output_win_size: int, n_step_out
             train_size: float, training fraction of dataset
             validate_size: float, validation fraction of dataset
             batch_size: int, batch size of training dataset
@@ -603,22 +646,38 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         train_data.iloc[:, selected_feats_indices] = self.scaler.fit_transform(train_data[selected_feats])
         val_data.iloc[:, selected_feats_indices] = self.scaler.transform(val_data[selected_feats])
         test_data.iloc[:, selected_feats_indices] = self.scaler.transform(test_data[selected_feats])
+        self.dataset = pd.concat([train_data, val_data, test_data], ignore_index=True)
+        # print('train_data: ', train_data.shape)
+        # print('val_data: ', val_data.shape)
+        # print('test_data: ', test_data.shape)
 
         # logging debug info
         logging.info(f'X_train data after seq: {train_data} X_train shape {train_data.shape}')
         train_data.to_csv('X_train.csv', sep=',')
 
         # 3. split datasets into sequences wrt n_step_in, and n_step_out
-        X_train, y_train = self.split_sequence(train_data, input_win_size, output_win_size, label_columns)
-        X_val, y_val = self.split_sequence(val_data, input_win_size, output_win_size, label_columns)
-        X_test, y_test = self.split_sequence(test_data, input_win_size, output_win_size, label_columns)
+        X_train, y_train_reg, y_train_cls = self.split_sequence(train_data,
+                                                                input_win_size,
+                                                                output_win_size,
+                                                                label_columns)
+        X_val, y_val_reg, y_val_cls = self.split_sequence(val_data,
+                                                          input_win_size,
+                                                          output_win_size,
+                                                          label_columns)
+        X_test, y_test_reg, y_test_cls = self.split_sequence(test_data,
+                                                             input_win_size,
+                                                             output_win_size,
+                                                             label_columns)
+        self.y_test_reg_ds, self.y_test_cls_ds = y_test_reg.copy(), y_test_cls.copy()
+        # print('X_train: ', X_train.shape, 'y_train_reg: ', y_train_reg.shape)
+        # print('X_val: ', X_val.shape, 'y_val_reg: ', y_val_reg.shape)
+        # print('X_test: ', X_test.shape, 'y_test_reg: ', y_test_reg.shape)
 
         # 4. batch and shuffle datasets and load them into tensors
-        train_dataset = (tf.data.Dataset.from_tensor_slices((X_train, y_train)).batch(batch_size)
+        train_dataset = (tf.data.Dataset.from_tensor_slices((X_train, y_train_reg, y_train_cls)).batch(batch_size)
                          .shuffle(len(X_train)))
-        val_dataset = tf.data.Dataset.from_tensor_slices((X_val, y_val)).batch(batch_size)
-        test_dataset = tf.data.Dataset.from_tensor_slices((X_test, y_test)).batch(batch_size)
-
+        val_dataset = tf.data.Dataset.from_tensor_slices((X_val, y_val_reg, y_val_cls)).batch(batch_size)
+        test_dataset = tf.data.Dataset.from_tensor_slices((X_test, y_test_reg, y_test_cls)).batch(batch_size)
 
         # return (X_train, y_train), (X_val, y_val), (X_test, y_test)
         return train_dataset, val_dataset, test_dataset

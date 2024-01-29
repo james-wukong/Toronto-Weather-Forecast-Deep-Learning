@@ -82,15 +82,17 @@ class LSTMLikeModel(keras.Model):
     Custom LSTM Like Model
     """
 
-    def __init__(self, n_steps_in, n_features, n_steps_out, n_features_out, default_units=512):
+    def __init__(self, n_steps_in, n_features, n_steps_out,
+                 n_features_reg_out, n_features_cls_out, default_units=512):
         super(LSTMLikeModel, self).__init__()
         self.n_steps_in = n_steps_in
         self.n_features = n_features
         self.n_steps_out = n_steps_out
-        self.n_features_out = n_features_out
+        self.n_features_reg_out = n_features_reg_out
+        self.n_features_cls_out = n_features_cls_out
         self.default_units = default_units
 
-        self.input_layer = layers.LSTM(default_units, activation='softmax',
+        self.input_layer = layers.LSTM(default_units, activation='tanh',
                                        input_shape=(n_steps_in, n_features),
                                        kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01),
                                        # return_sequences=True,
@@ -106,10 +108,12 @@ class LSTMLikeModel(keras.Model):
             layers.LSTM(256,
                         return_sequences=True,
                         kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01)))
-        self.timed_layer = layers.TimeDistributed(layers.Dense(n_features_out))
+        self.timed_layer_reg = layers.TimeDistributed(layers.Dense(n_features_reg_out, name='reg_out'))
+        self.timed_layer_cls = layers.TimeDistributed(layers.Dense(n_features_cls_out,
+                                                                   activation='tanh', name='cls_out'))
 
     def call(self, inputs, training=False, mask: Any = None) -> Any:
-        x = self.input_layer(inputs)
+        x = self.input_layer(inputs, training=training)
         # x = self.flatten_layer(x)
         # x = self.reshape_layer(x)
         x = self.repvect_layer(x)
@@ -117,10 +121,11 @@ class LSTMLikeModel(keras.Model):
         # x = self.lstm_layer(x)
         x = self.dropout(x)
         x = self.lstm_layer_bi(x)
-        # x = self.dropout(x)
+        x = self.dropout(x)
 
-        output = self.timed_layer(x)
-        return output
+        output_reg = self.timed_layer_reg(x)
+        output_cls = self.timed_layer_cls(x)
+        return {'reg_out': output_reg, 'cls_out': output_cls}
 
     def build(self, input_shape):
         """
