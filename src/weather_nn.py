@@ -5,7 +5,34 @@ from tensorflow.keras import layers, regularizers
 from typing import Any
 import logging
 
-logging.basicConfig(level=logging.DEBUG, filename='weather_nn.log', filemode='a')
+
+class MultiOutputModelCheckpoint(keras.callbacks.ModelCheckpoint):
+    def __init__(self, filepath, monitor_dict, mode='min', **kwargs):
+        super(MultiOutputModelCheckpoint, self).__init__(filepath, mode, **kwargs)
+        self.filepath = filepath
+        self.monitor_dict = monitor_dict
+        self.mode = mode
+        self.best_metrics = {output: float('inf') if mode == 'min' else float('-inf') for output in monitor_dict}
+
+    def on_epoch_end(self, epoch, logs=None):
+        print('in checkpoints custom logs: ', logs)
+        for output, monitor_metric in self.monitor_dict.items():
+            current_metric = logs.get(monitor_metric)
+            if current_metric is None:
+                raise ValueError(f"Metric {monitor_metric} is not available in the training logs.")
+
+            if (self.mode == 'min' and current_metric < self.best_metrics[output]) or \
+                    (self.mode == 'max' and current_metric > self.best_metrics[output]):
+
+                self.best_metrics[output] = current_metric
+
+                if self.save_best_only and self.save_weights_only:
+                    # self.model.save(filepath=self.filepath.format(output=output, epoch=epoch + 1), overwrite=True)
+                    self.model.save_weights(filepath=self.filepath.format(output=output, epoch=epoch + 1), overwrite=True)
+
+            if self.verbose > 0:
+                print(f"\nEpoch {epoch + 1}: {output} improved from {self.best_metrics[output]:.4f} "
+                      f"to {current_metric:.4f}, saving model: {self.filepath.format(output=output, epoch=epoch + 1)}")
 
 
 class PrintEpochProgress(keras.callbacks.Callback):
@@ -13,18 +40,20 @@ class PrintEpochProgress(keras.callbacks.Callback):
         """
         print info at the end of each epoch
         """
-        print('\nEpoch:', epoch, ' Loss:', logs['loss'])
+        print('\nEpoch:', epoch+1, ' Loss:', logs['loss'])
 
 
 class EarlyStoppingAtMinLoss(keras.callbacks.EarlyStopping):
     """
     Early stop when loss does not improve over epochs
     """
-    def __init__(self, patience: int = 0, restore_best_weights: bool = False):
-        super(EarlyStoppingAtMinLoss, self).__init__(patience=patience,
+
+    def __init__(self, monitor: str = "val_loss", patience: int = 0, restore_best_weights: bool = False):
+        super(EarlyStoppingAtMinLoss, self).__init__(monitor=monitor, patience=patience,
                                                      restore_best_weights=restore_best_weights)
         self.best = None
         self.patience = patience
+        self.monitor = monitor
         self.restore_best_weights = restore_best_weights
         # best_weights to store the weights at which the minimum loss occurs.
         self.best_weights = None
@@ -38,10 +67,13 @@ class EarlyStoppingAtMinLoss(keras.callbacks.EarlyStopping):
         self.best = np.Inf
 
     def on_epoch_end(self, epoch, logs=None):
+        # combined_loss = sum(logs[output] for output in self.monitor_dict.values())
+        # logs['combined_loss'] = sum(logs[output] for output in self.monitor_dict.values())
         # Perform the regular early stopping check
         super(EarlyStoppingAtMinLoss, self).on_epoch_end(epoch, logs)
 
-        current = logs.get('loss')
+        current = logs.get(self.monitor)
+        # current = logs.get('combined_loss')
         if np.less(current, self.best):
             self.best = current
             self.wait = 0
@@ -64,6 +96,7 @@ class LossAndErrorLoggingCallback(keras.callbacks.Callback):
     """
     log loss and errors
     """
+
     def on_train_batch_end(self, batch, logs=None):
         logging.debug('Up to batch {}, the average loss is {:7.2f}.'.format(batch, logs['loss']))
 
@@ -72,9 +105,9 @@ class LossAndErrorLoggingCallback(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         keys = list(logs.keys())
-        metrics = logs['mean_absolute_error'] if 'mean_absolute_error' in keys else None
-        logging.debug('The average loss for epoch {} is {:7.2f} ')
-        logging.debug('and mean absolute error is {:7.2f}.'.format(epoch, logs['loss'], metrics))
+        metrics = logs['mean_absolute_error'] if 'mean_absolute_error' in keys else 0
+        logging.debug('The average loss for epoch {} is {:7.2f} '.format(epoch, logs['loss']))
+        logging.debug('and mean absolute error is {:7.2f}.'.format(metrics))
 
 
 class LSTMLikeModel(keras.Model):
@@ -97,31 +130,29 @@ class LSTMLikeModel(keras.Model):
                                        kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01),
                                        # return_sequences=True,
                                        )
-        self.dropout = layers.Dropout(0.5)
-        # self.flatten_layer = layers.Flatten()
-        # self.reshape_layer = layers.Reshape((n_steps_in * default_units,))
+        self.bn_1 = layers.BatchNormalization()
+        self.dropout_1 = layers.Dropout(0.25, name='dropout_1')
+
         self.repvect_layer = layers.RepeatVector(n_steps_out)
-        # self.lstm_layer = layers.LSTM(256, activation='softmax',
-        #                               return_sequences=True,
-        #                               kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01))
         self.lstm_layer_bi = layers.Bidirectional(
             layers.LSTM(256,
                         return_sequences=True,
                         kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01)))
-        self.timed_layer_reg = layers.TimeDistributed(layers.Dense(n_features_reg_out, name='reg_out'))
+        self.bn_2 = layers.BatchNormalization()
+        self.dropout_2 = layers.Dropout(0.25, name='dropout_3')
+
+        self.timed_layer_reg = layers.TimeDistributed(layers.Dense(n_features_reg_out), name='reg_out')
         self.timed_layer_cls = layers.TimeDistributed(layers.Dense(n_features_cls_out,
-                                                                   activation='tanh', name='cls_out'))
+                                                                   activation='sigmoid'), name='cls_out')
 
     def call(self, inputs, training=False, mask: Any = None) -> Any:
         x = self.input_layer(inputs, training=training)
-        # x = self.flatten_layer(x)
-        # x = self.reshape_layer(x)
-        x = self.repvect_layer(x)
-        # x = self.dropout(x)
-        # x = self.lstm_layer(x)
-        x = self.dropout(x)
-        x = self.lstm_layer_bi(x)
-        x = self.dropout(x)
+        x = self.bn_1(x)
+        x = self.dropout_1(x)
+        x = self.repvect_layer(x, training=training)
+        x = self.lstm_layer_bi(x, training=training)
+        x = self.bn_2(x)
+        x = self.dropout_2(x)
 
         output_reg = self.timed_layer_reg(x)
         output_cls = self.timed_layer_cls(x)

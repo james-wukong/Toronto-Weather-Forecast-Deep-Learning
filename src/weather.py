@@ -4,7 +4,7 @@ from collections import defaultdict
 import tensorflow as tf
 from abc import ABC, abstractmethod
 from sklearn.preprocessing import MultiLabelBinarizer, OneHotEncoder, LabelEncoder
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
 import matplotlib.pyplot as plt
 import logging
@@ -16,7 +16,6 @@ logging.basicConfig(level=logging.DEBUG, filename='weather.log', filemode='w')
 class WeatherData:
     def __init__(self, df: pd.DataFrame = None):
         self.df = df
-        # self.win_size = kwargs.get('win_size') if kwargs.get('win_size') else None
 
     def get_feature_index(self, feat_list=None) -> list:
         feature_indices = [self.df.columns.get_loc(feature) for feature in feat_list]
@@ -45,12 +44,37 @@ class WeatherData:
         """
         Plot the training and validation loss
         """
-        plt.plot(history.history['loss'], label='Training Loss')
-        plt.plot(history.history['val_loss'], label='Validation Loss')
-        plt.xlabel('Epoch')
+        # Extract training and validation metrics from the history object
+        print(history.history)
+        training_loss = history.history['loss']
+        validation_loss = history.history.get('val_loss', None)
+        training_accuracy = history.history.get('cls_out_accuracy', None)
+        validation_accuracy = history.history.get('val_cls_out_accuracy', None)
+
+        # Plotting the training loss
+        plt.figure(figsize=(12, 6))
+        plt.subplot(1, 2, 1)
+        plt.plot(training_loss, label='Training Loss')
+        if validation_loss is not None:
+            plt.plot(validation_loss, label='Validation Loss')
+            plt.legend()
+        plt.title('Training and Validation Loss')
+        plt.xlabel('Epochs')
         plt.ylabel('Loss')
-        plt.title('Training and Validation Loss over Epochs')
-        plt.legend()
+
+        # Plotting the training accuracy
+        if training_accuracy is not None:
+            plt.subplot(1, 2, 2)
+            plt.plot(training_accuracy, label='Training Accuracy')
+            if validation_accuracy is not None:
+                plt.plot(validation_accuracy, label='Validation Accuracy')
+                plt.legend()
+            plt.title('Training and Validation Accuracy')
+            plt.xlabel('Epochs')
+            plt.ylabel('Accuracy')
+
+        plt.tight_layout()
+        plt.savefig('data/images/history.png')
         plt.show()
 
     @staticmethod
@@ -193,8 +217,6 @@ class BaseBuilder(ABC):
 
     @abstractmethod
     def inverse_label_sequence(self, data: tuple,
-                               input_win_size: int,
-                               output_win_size: int,
                                label_columns: tuple = None) -> pd.DataFrame:
         pass
 
@@ -206,6 +228,11 @@ class BaseBuilder(ABC):
                           validate_size: float,
                           batch_size: int,
                           label_columns: defaultdict = None) -> tuple:
+        pass
+
+    def unscale_prediction(self, input_win_size: int,
+                           predictions: pd.DataFrame,
+                           label_columns: defaultdict = None) -> np.ndarray:
         pass
 
 
@@ -224,9 +251,18 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         self._weather = WeatherData(df)
         # self.reset()
         self.scaler = MinMaxScaler()
+        self.y_test_ds = None
         self.y_test_reg_ds = None
         self.y_test_cls_ds = None
         self.dataset = None
+        self.predict_input = None
+        self.predict_input_original = None
+        self.selected_feats = ['temp', 'feelslike', 'dew', 'snowdepth', 'windgust',
+                               'humidity', 'precip', 'precipprob', 'snow',
+                               'windspeed', 'winddir', 'sealevelpressure',
+                               'cloudcover', 'visibility', 'solarradiation',
+                               'severerisk', 'day', 'month', 'year',
+                               'dayofweek', 'weekofyear', 'hour', 'season']
 
     # def reset(self) -> None:
     #     self._weather = WeatherData(self._df)
@@ -564,38 +600,31 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         sequences, labels_reg, labels_cls = [], [], []
         for i in range(len(data) - input_win_size - output_win_size + 1):
             seq = data.iloc[i:i + input_win_size, :].values
-            if label_columns is None:
-                label_reg = data.iloc[i + input_win_size:i + input_win_size + output_win_size, :].values
-                label_cls = data.iloc[i + input_win_size:i + input_win_size + output_win_size, :].values
-            else:
+            if label_columns is not None:
                 label_reg = (data.iloc[i + input_win_size:i + input_win_size + output_win_size,
                              data.columns.get_indexer(label_columns['reg'])].values)
                 label_cls = (data.iloc[i + input_win_size:i + input_win_size + output_win_size,
                              data.columns.get_indexer(label_columns['cls'])].values)
-
+                labels_reg.append(label_reg)
+                labels_cls.append(label_cls)
             sequences.append(seq)
-            labels_reg.append(label_reg)
-            labels_cls.append(label_cls)
 
-        return np.array(sequences), np.array(labels_reg), np.array(labels_cls)
+        return (np.array(sequences, dtype=np.float32),
+                np.array(labels_reg, dtype=np.float32),
+                np.array(labels_cls, dtype=np.float32))
 
     def inverse_label_sequence(self, y_data_hat: np.array,
-                               input_win_size: int,
-                               output_win_size: int,
                                label_columns: tuple = None) -> pd.DataFrame:
         """
         inverse split sequence and generate an original dataset
         Args:
             y_data_hat: np.array, input data
             label_columns: tuple, contain features to be list
-            input_win_size: # 5 days of hourly observations -> 5 * 24
-            output_win_size:  # Predict weather for the next 3 days -> 3 * 24
 
         Returns:
         """
         result = pd.DataFrame()
         for idx, labels in enumerate(y_data_hat):
-            print('printing labels: ', labels.shape, type(labels))
             if idx == 0:
                 a = pd.DataFrame(labels[:, :], columns=label_columns)
                 # result.append(labels[:, :], columns=label_columns, ignore_index=True, inplace=True)
@@ -632,28 +661,31 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         train_data = self.weather.df.iloc[:train_size]
         val_data = self.weather.df.iloc[train_size:train_size + val_size]
         test_data = self.weather.df.iloc[train_size + val_size:]
+        self.predict_input_original = self.weather.df.iloc[-1 * input_win_size:, self.weather.df.columns.get_indexer(
+            label_columns['reg'])]
 
         # scaler = StandardScaler()
         # scaler = MinMaxScaler()
-        selected_feats = ['temp', 'feelslike', 'dew', 'snowdepth', 'windgust',
-                          'humidity', 'precip', 'precipprob', 'snow',
-                          'windspeed', 'winddir', 'sealevelpressure',
-                          'cloudcover', 'visibility', 'solarradiation',
-                          'severerisk', 'day', 'month', 'year',
-                          'dayofweek', 'weekofyear', 'hour', 'season']
-        selected_feats_indices = self.weather.df.columns.get_indexer(selected_feats)
+        selected_feats_indices = self.weather.df.columns.get_indexer(self.selected_feats)
+        # self.weather.df.iloc[-30:, selected_feats_indices].to_csv('test_data.csv', sep=',')
         # 2. scaling numerical features for all datasets
-        train_data.iloc[:, selected_feats_indices] = self.scaler.fit_transform(train_data[selected_feats])
-        val_data.iloc[:, selected_feats_indices] = self.scaler.transform(val_data[selected_feats])
-        test_data.iloc[:, selected_feats_indices] = self.scaler.transform(test_data[selected_feats])
+        train_data.iloc[:, selected_feats_indices] = self.scaler.fit_transform(train_data[self.selected_feats])
+        val_data.iloc[:, selected_feats_indices] = self.scaler.transform(val_data[self.selected_feats])
+        test_data.iloc[:, selected_feats_indices] = self.scaler.transform(test_data[self.selected_feats])
         self.dataset = pd.concat([train_data, val_data, test_data], ignore_index=True)
-        # print('train_data: ', train_data.shape)
+        # self.dataset.iloc[-30:, selected_feats_indices].to_csv('scaled data.csv', sep=',')
+        self.predict_input, _, _ = self.split_sequence(self.dataset.iloc[-1 * input_win_size:],
+                                                       input_win_size,
+                                                       output_win_size=0,
+                                                       label_columns=None)
+
+        # print('train_data shape: ', train_data.shape)
         # print('val_data: ', val_data.shape)
         # print('test_data: ', test_data.shape)
 
         # logging debug info
-        logging.info(f'X_train data after seq: {train_data} X_train shape {train_data.shape}')
-        train_data.to_csv('X_train.csv', sep=',')
+        # logging.info(f'X_train data after seq: {train_data} X_train shape {train_data.shape}')
+        # train_data.to_csv('X_train.csv', sep=',')
 
         # 3. split datasets into sequences wrt n_step_in, and n_step_out
         X_train, y_train_reg, y_train_cls = self.split_sequence(train_data,
@@ -681,6 +713,21 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
 
         # return (X_train, y_train), (X_val, y_val), (X_test, y_test)
         return train_dataset, val_dataset, test_dataset
+
+    def unscale_prediction(self, input_win_size: int,
+                           predictions: pd.DataFrame,
+                           label_columns: defaultdict = None) -> np.ndarray:
+        result = np.ndarray
+        selected_label_indices = [self.selected_feats.index(label) for label in label_columns['reg']]
+        if not self.dataset.empty:
+            empty_ds = np.empty((len(predictions), len(self.selected_feats)))
+            empty_ds[:, :] = np.nan
+            empty_ds[:len(predictions), selected_label_indices] = predictions
+
+            result = self.scaler.inverse_transform(empty_ds)
+            np.savetxt('prediction inverse result.csv', result, delimiter=',')
+
+        return result[:, selected_label_indices]
 
 
 class Director:

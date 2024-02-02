@@ -1,6 +1,6 @@
 saved_models:
-  entire_model: data/models/entire_model
-  weights_model: data/models/weights_model
-  chkpoint_model: data/models/chkpoint_model
+  entire_model: data/models/entire_model/
+  weights_model: data/models/weights_model/
+  chkpoint_model: data/models/chkpoint_model/
 data:
-  history_weather: data/weather
+  history_weather: data/weather/
