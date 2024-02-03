@@ -5,7 +5,6 @@ __pycache__/
 
 # By Author
 .idea/
-data/*
 test.py
 *.log
 .DS_Store
