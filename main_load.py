@@ -27,7 +27,7 @@ if __name__ == '__main__':
 
     # prod_config
     # n_step_in and n_step_out: using timesteps in history to predict timesteps in future
-    n_steps_in, n_steps_out = 24 * 5, int(24 / 2)
+    n_steps_in, n_steps_out = 24 * 5, int(24 / 4)
     # training, validation and testing portions
     train_portion, valid_portion = 0.70, 0.15
     # batch size, epochs and learning rates wrt model
@@ -43,8 +43,8 @@ if __name__ == '__main__':
     # data preprocessing
     director.build_weather_dataset()
     # check missing values and make sure data is clean now
-    missing_values(director.builder.weather.df)
-    print(director.builder.weather.df.columns)
+    # missing_values(director.builder.weather.df)
+    # print(director.builder.weather.df.columns)
 
     # get datasets: after scaling, batching, and training dataset shuffling
     train_dataset, val_dataset, test_dataset = builder.create_train_test(

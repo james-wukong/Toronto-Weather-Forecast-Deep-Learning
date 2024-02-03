@@ -662,7 +662,7 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         val_data = self.weather.df.iloc[train_size:train_size + val_size]
         test_data = self.weather.df.iloc[train_size + val_size:]
         self.predict_input_original = self.weather.df.iloc[-1 * input_win_size:, self.weather.df.columns.get_indexer(
-            label_columns['reg'])]
+            label_columns['reg'] + label_columns['cls'])]
 
         # scaler = StandardScaler()
         # scaler = MinMaxScaler()

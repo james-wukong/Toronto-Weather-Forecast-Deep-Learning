@@ -1,4 +1,6 @@
 import os
+
+import pandas as pd
 # import logging
 import yaml
 from src.weather import *
@@ -27,7 +29,7 @@ if __name__ == '__main__':
 
     # prod_config
     # n_step_in and n_step_out: using timesteps in history to predict timesteps in future
-    n_steps_in, n_steps_out = 24 * 5, int(24 / 2)
+    n_steps_in, n_steps_out = 24 * 7, int(24 / 4)
     # training, validation and testing portions
     train_portion, valid_portion = 0.70, 0.15
     # batch size, epochs and learning rates wrt model
@@ -105,7 +107,11 @@ if __name__ == '__main__':
     predictions_reg_inverse = builder.inverse_label_sequence(predictions['reg_out'],
                                                              label_columns=label_columns['reg'])
     predictions_reg = builder.unscale_prediction(n_steps_in, predictions_reg_inverse, label_columns)
-    print('predictions reg: ', predictions['reg_out'])
-    print('predictions cls: ', predictions['cls_out'])
-    print('predictions_reg: ', predictions_reg)
-    print('predict_input_original: ', builder.predict_input_original)
+    # print('predictions reg: ', predictions['reg_out'])
+    # print('predictions cls: ', predictions['cls_out'])
+    threshold = 0.5
+    binary_values = (predictions['cls_out'] >= threshold).astype(int)
+    print('weather in prevous 10 hours: \n', builder.predict_input_original.iloc[-10:, :].to_string(index=False))
+    result = np.concatenate((predictions_reg, np.array(binary_values[0])), axis=1)
+    result = pd.DataFrame(result, columns=['temp', 'feelslike', 'rain', 'snow'])
+    print('predicted results in next 6 hours: \n ', result.to_string(index=False))
