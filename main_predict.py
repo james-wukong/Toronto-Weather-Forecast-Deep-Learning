@@ -3,12 +3,10 @@ import os
 import pandas as pd
 # import logging
 import yaml
-from src.weather import *
-from src.helpers import load_df_from_dir, missing_values
 from tensorflow import keras
+from src.weather import *
+from src.helpers import load_df_from_dir, build_print_line
 from src.weather_nn import LSTMLikeModel
-from src.weather_nn import PrintEpochProgress, EarlyStoppingAtMinLoss, LossAndErrorLoggingCallback
-from src.weather_nn import MultiOutputModelCheckpoint
 
 # Configure logging
 # logging.basicConfig(level=logging.DEBUG, filename='weather.log', filemode='w')
@@ -35,6 +33,7 @@ if __name__ == '__main__':
     # batch size, epochs and learning rates wrt model
     batch_size, epochs, learning_rate = 24 * 90, 100, 5e-5
     # load the data from dir
+    build_print_line('start preparing data')
     df = load_df_from_dir(cfg['data']['history_weather'])
     label_columns = defaultdict(tuple, {'reg': ('temp', 'feelslike'), 'cls': ('ohe_rain', 'ohe_snow')})
 
@@ -57,6 +56,7 @@ if __name__ == '__main__':
 
     n_features = len(director.builder.weather.df.columns)
 
+    build_print_line('start initialize and configure the model')
     model = LSTMLikeModel(n_steps_in=n_steps_in, n_features=n_features,
                           n_steps_out=n_steps_out, n_features_reg_out=len(label_columns['reg']),
                           n_features_cls_out=len(label_columns['cls']), default_units=1024)
@@ -74,6 +74,7 @@ if __name__ == '__main__':
         weighted_metrics=[],
     )
 
+    build_print_line('start loading weights of the model')
     model.load_weights(cfg['saved_models']['chkpoint_model'])
     # model.summary()
 
@@ -91,18 +92,7 @@ if __name__ == '__main__':
     X_val, y_val_reg, y_val_cls = val_element[0].numpy(), val_element[1].numpy(), val_element[2].numpy()
     X_test, y_test_reg, y_test_cls = test_element[0].numpy(), test_element[1].numpy(), test_element[2].numpy()
 
-    # evaluate the model
-    test_loss = model.evaluate(X_test,
-                               {
-                                   'reg_out': y_test_reg,
-                                   'cls_out': y_test_cls,
-                               },
-                               verbose=2,
-                               sample_weight=None, )
-    # [overall_loss, cls_out_loss, reg_out_loss, cls_out_accuracy, reg_out_mae]
-    # [0.6065227389335632, 0.1882576197385788, 0.006807046476751566, 0.9515432119369507, 0.06326348334550858],
-    print(f'Test Loss: {test_loss}, type: {type(test_loss)}')
-
+    build_print_line(f'start predicting the next {n_steps_out} hours:\n')
     predictions = model.predict(builder.predict_input)
     predictions_reg_inverse = builder.inverse_label_sequence(predictions['reg_out'],
                                                              label_columns=label_columns['reg'])

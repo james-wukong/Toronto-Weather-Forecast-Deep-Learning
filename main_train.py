@@ -1,9 +1,9 @@
 import os
 # import logging
 import yaml
-from src.weather import *
-from src.helpers import load_df_from_dir, missing_values
 from tensorflow import keras
+from src.weather import *
+from src.helpers import load_df_from_dir, missing_values, build_print_line
 from src.weather_nn import LSTMLikeModel
 from src.weather_nn import PrintEpochProgress, EarlyStoppingAtMinLoss, LossAndErrorLoggingCallback
 from src.weather_nn import MultiOutputModelCheckpoint
@@ -32,7 +32,8 @@ if __name__ == '__main__':
     train_portion, valid_portion = 0.70, 0.15
     # batch size, epochs and learning rates wrt model
     batch_size, epochs, learning_rate = 24 * 90, 100, 5e-5
-    # load the data from di5
+    # load the data from directory
+    build_print_line('start loading data from csv files')
     df = load_df_from_dir(cfg['data']['history_weather'])
     label_columns = defaultdict(tuple, {'reg': ('temp', 'feelslike'), 'cls': ('ohe_rain', 'ohe_snow')})
     # label_columns = defaultdict(tuple, {'reg': ('feelslike',), 'cls': ('ohe_rain',)})
@@ -42,12 +43,14 @@ if __name__ == '__main__':
     director.builder = builder
 
     # data preprocessing
+    build_print_line('start preprocessing data')
     director.build_weather_dataset()
     # check missing values and make sure data is clean now
     missing_values(director.builder.weather.df)
     # print(director.builder.weather.df.columns)
 
     # get datasets: after scaling, batching, and training dataset shuffling
+    build_print_line('start split dataset and split sequences')
     train_dataset, val_dataset, test_dataset = builder.create_train_test(
         input_win_size=n_steps_in,
         output_win_size=n_steps_out,
@@ -59,6 +62,7 @@ if __name__ == '__main__':
 
     n_features = len(director.builder.weather.df.columns)
 
+    build_print_line('start initialize and configure the model')
     model = LSTMLikeModel(n_steps_in=n_steps_in, n_features=n_features,
                           n_steps_out=n_steps_out, n_features_reg_out=len(label_columns['reg']),
                           n_features_cls_out=len(label_columns['cls']), default_units=1024)
@@ -90,6 +94,7 @@ if __name__ == '__main__':
     X_val, y_val_reg, y_val_cls = val_element[0].numpy(), val_element[1].numpy(), val_element[2].numpy()
     X_test, y_test_reg, y_test_cls = test_element[0].numpy(), test_element[1].numpy(), test_element[2].numpy()
 
+    build_print_line('start training the model')
     history = model.fit(X_train,
                         {
                             'reg_out': y_train_reg,

@@ -26,9 +26,15 @@ It uses weather data in previous days to forecasting the weather conditions in t
 8. evaluate by testing dataset predictions
 9. fine turning hyperparameters to get a better result
 
-## To Use
+## How To Use
 
 install libraries listed in requirements.txt
+
+```shell
+pip install -r requirements. txt
+```
+
+The model is saved by method model.save_weights('data/models/chkpoint_model'), as a result, only weights are saved.
 
 1. to train the model:
 

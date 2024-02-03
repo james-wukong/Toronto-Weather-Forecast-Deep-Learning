@@ -32,8 +32,12 @@ def load_df_from_dir(data_dir: str = '') -> pd.DataFrame:
     return combined_df
 
 
+def build_print_line(txt: str, symbol: str = '-', repeat_times: int = 20) -> None:
+    print(f'{symbol*repeat_times}{txt}{symbol*repeat_times}')
+
+
 def missing_values(data: pd.DataFrame = None) -> None:
-    print('---------printing missing values-------------')
+    build_print_line('check missing values')
     for col in data:
         missing_data = data[col].isna().sum()
         if missing_data > 0:
@@ -42,4 +46,4 @@ def missing_values(data: pd.DataFrame = None) -> None:
                 |  Percentage: {round(perc, 2)} \
                 |  Data Type: {data[col].dtypes}')
 
-    print('---------end printing missing values-------------')
+    build_print_line('check missing values end')
