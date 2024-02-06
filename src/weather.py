@@ -1,13 +1,13 @@
+import logging
+from collections import defaultdict
+from abc import ABC, abstractmethod
 import pandas as pd
 import numpy as np
-from collections import defaultdict
 import tensorflow as tf
-from abc import ABC, abstractmethod
 from sklearn.preprocessing import MultiLabelBinarizer, OneHotEncoder, LabelEncoder
 from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
 import matplotlib.pyplot as plt
-import logging
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, filename='weather.log', filemode='w')

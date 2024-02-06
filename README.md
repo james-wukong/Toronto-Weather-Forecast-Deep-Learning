@@ -4,11 +4,18 @@
 
 The dataset was collected from [Visual Crossing](https://www.visualcrossing.com), it includes more than 5 years of hourly based recorded observations and this project only focuses on the weather in Toronto.
 
-Thanks for the 1000/day free api from Visual Crossing.
-
 ## Overall
 
 It uses weather data in previous days to forecasting the weather conditions in the future hours or days.
+
+## Project Structure
+
+- data/weather: contains hourly based weather dataset over 5 years
+- data/models: contains weights saved from different models
+- data/images: learning curve images from models
+- data/logs: saved tensor board data
+- src: modules and helper function written for this project
+- tests: test cases for this project (don't have much time enriching test cases)
 
 ## Pipeline
 
@@ -28,7 +35,7 @@ It uses weather data in previous days to forecasting the weather conditions in t
 
 ## How To Use
 
-install libraries listed in requirements.txt
+install libraries listed in requirements.txt, make sure you have installed the required libraries before you run the following commands.
 
 ```shell
 pip install -r requirements. txt
@@ -36,20 +43,35 @@ pip install -r requirements. txt
 
 The model is saved by method model.save_weights('data/models/chkpoint_model'), as a result, only weights are saved.
 
-1. to train the model:
+Basically models have been trained, and we don't have to run training again, because it takes hours to complete.
+
+We can use 2nd command to load and evaluate the model directly. If you would like to make a prediction, in this case we don't have to input any data, because we are using the last n_step_in (24 * 5) observations to predict n_step_out (24 / 4) hours weather. Consequently, just run the 3rd command to make a prediction.
+
+1. to train the model (takes long time):
 
 ```sh
 python main_train.py
 ```
 
-2. to load and evaluate model:
+1. to load and evaluate model:
 
 ```sh
 python main_load.py
 ```
 
-2. to make predictions with model:
+1. to make predictions with model:
 
 ```sh
 python main_predict.py
+```
+
+Additionally, if you are interested in performance of BaseModel and GruBasedModel, you could run the following commands:
+
+```sh
+# this will produce the learning curve at the end of evaluation
+# evaluate base model
+python main_base_load.py
+
+# evaluate gru base model
+python main_gru_load.py
 ```
