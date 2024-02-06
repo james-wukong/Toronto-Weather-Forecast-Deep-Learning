@@ -1,5 +1,6 @@
 # import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, regularizers
 from typing import Any
@@ -28,7 +29,8 @@ class MultiOutputModelCheckpoint(keras.callbacks.ModelCheckpoint):
 
                 if self.save_best_only and self.save_weights_only:
                     # self.model.save(filepath=self.filepath.format(output=output, epoch=epoch + 1), overwrite=True)
-                    self.model.save_weights(filepath=self.filepath.format(output=output, epoch=epoch + 1), overwrite=True)
+                    self.model.save_weights(filepath=self.filepath.format(output=output, epoch=epoch + 1),
+                                            overwrite=True)
 
             if self.verbose > 0:
                 print(f"\nEpoch {epoch + 1}: {output} improved from {self.best_metrics[output]:.4f} "
@@ -40,7 +42,7 @@ class PrintEpochProgress(keras.callbacks.Callback):
         """
         print info at the end of each epoch
         """
-        print('\nEpoch:', epoch+1, ' Loss:', logs['loss'])
+        print('\nEpoch:', epoch + 1, ' Loss:', logs['loss'])
 
 
 class EarlyStoppingAtMinLoss(keras.callbacks.EarlyStopping):
@@ -110,14 +112,14 @@ class LossAndErrorLoggingCallback(keras.callbacks.Callback):
         logging.debug('and mean absolute error is {:7.2f}.'.format(metrics))
 
 
-class LSTMLikeModel(keras.Model):
+class LstmBasedModel(keras.Model):
     """
-    Custom LSTM Like Model
+    Custom LSTM Based NN Model
     """
 
     def __init__(self, n_steps_in, n_features, n_steps_out,
                  n_features_reg_out, n_features_cls_out, default_units=512):
-        super(LSTMLikeModel, self).__init__()
+        super(LstmBasedModel, self).__init__()
         self.n_steps_in = n_steps_in
         self.n_features = n_features
         self.n_steps_out = n_steps_out
@@ -130,32 +132,161 @@ class LSTMLikeModel(keras.Model):
                                        kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01),
                                        # return_sequences=True,
                                        )
+        self.repvect_layer = layers.RepeatVector(n_steps_out)
         self.bn_1 = layers.BatchNormalization()
         self.dropout_1 = layers.Dropout(0.25, name='dropout_1')
 
-        self.repvect_layer = layers.RepeatVector(n_steps_out)
         self.lstm_layer_bi = layers.Bidirectional(
             layers.LSTM(256,
                         return_sequences=True,
                         kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01)))
         self.bn_2 = layers.BatchNormalization()
-        self.dropout_2 = layers.Dropout(0.25, name='dropout_3')
+        self.dropout_2 = layers.Dropout(0.25, name='dropout_2')
+
+        self.lstm_layer_bi3 = layers.Bidirectional(
+            layers.LSTM(62,
+                        return_sequences=True,
+                        kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01)))
+        self.bn_3 = layers.BatchNormalization()
+        self.dropout_3 = layers.Dropout(0.25, name='dropout_3')
 
         self.timed_layer_reg = layers.TimeDistributed(layers.Dense(n_features_reg_out), name='reg_out')
         self.timed_layer_cls = layers.TimeDistributed(layers.Dense(n_features_cls_out,
                                                                    activation='sigmoid'), name='cls_out')
 
     def call(self, inputs, training=False, mask: Any = None) -> Any:
-        x = self.input_layer(inputs, training=training)
-        x = self.bn_1(x)
-        x = self.dropout_1(x)
-        x = self.repvect_layer(x, training=training)
-        x = self.lstm_layer_bi(x, training=training)
-        x = self.bn_2(x)
-        x = self.dropout_2(x)
+        x = self.input_layer(inputs)
+        x = self.repvect_layer(x)
+        x = self.bn_1(x, training=training)
+        x = self.dropout_1(x, training=training)
+
+        x = self.lstm_layer_bi(x)
+        x = self.bn_2(x, training=training)
+        x = self.dropout_2(x, training=training)
+
+        x = self.lstm_layer_bi3(x)
+        x = self.bn_3(x, training=training)
+        x = self.dropout_3(x, training=training)
 
         output_reg = self.timed_layer_reg(x)
         output_cls = self.timed_layer_cls(x)
+        return {'reg_out': output_reg, 'cls_out': output_cls}
+
+    def build(self, input_shape):
+        """
+        to correctly display summary() of the model
+        """
+        x = keras.Input(shape=(self.n_steps_in, self.n_features,))
+
+        return keras.Model(inputs=[x], outputs=self.call(x))
+
+
+class GruBasedModel(keras.Model):
+    """
+    Custom GRU Based NN Model
+    """
+
+    def __init__(self, n_steps_in, n_features, n_steps_out,
+                 n_features_reg_out, n_features_cls_out, default_units=512):
+        super(GruBasedModel, self).__init__()
+        self.n_steps_in = n_steps_in
+        self.n_features = n_features
+        self.n_steps_out = n_steps_out
+        self.n_features_reg_out = n_features_reg_out
+        self.n_features_cls_out = n_features_cls_out
+        self.default_units = default_units
+
+        self.input_layer = layers.GRU(default_units, activation='tanh',
+                                       input_shape=(n_steps_in, n_features),
+                                       kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01),
+                                       # return_sequences=True,
+                                       )
+        self.repvect_layer = layers.RepeatVector(n_steps_out)
+        self.bn_1 = layers.BatchNormalization()
+        self.dropout_1 = layers.Dropout(0.25, name='dropout_1')
+
+        self.gru_layer_bi = layers.Bidirectional(
+            layers.GRU(256,
+                        return_sequences=True,
+                        kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01)))
+        self.bn_2 = layers.BatchNormalization()
+        self.dropout_2 = layers.Dropout(0.25, name='dropout_2')
+
+        self.gru_layer_bi3 = layers.Bidirectional(
+            layers.GRU(62,
+                        return_sequences=True,
+                        kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01)))
+        self.bn_3 = layers.BatchNormalization()
+        self.dropout_3 = layers.Dropout(0.25, name='dropout_3')
+
+        self.timed_layer_reg = layers.TimeDistributed(layers.Dense(n_features_reg_out), name='reg_out')
+        self.timed_layer_cls = layers.TimeDistributed(layers.Dense(n_features_cls_out,
+                                                                   activation='sigmoid'), name='cls_out')
+
+    def call(self, inputs, training=False, mask: Any = None) -> Any:
+        x = self.input_layer(inputs)
+        x = self.repvect_layer(x)
+        x = self.bn_1(x, training=training)
+        x = self.dropout_1(x, training=training)
+
+        x = self.gru_layer_bi(x)
+        x = self.bn_2(x, training=training)
+        x = self.dropout_2(x, training=training)
+
+        x = self.gru_layer_bi3(x)
+        x = self.bn_3(x, training=training)
+        x = self.dropout_3(x, training=training)
+
+        output_reg = self.timed_layer_reg(x)
+        output_cls = self.timed_layer_cls(x)
+        return {'reg_out': output_reg, 'cls_out': output_cls}
+
+    def build(self, input_shape):
+        """
+        to correctly display summary() of the model
+        """
+        x = keras.Input(shape=(self.n_steps_in, self.n_features,))
+
+        return keras.Model(inputs=[x], outputs=self.call(x))
+
+
+class BaseModel(keras.Model):
+    """
+    Custom Base NN Model
+    """
+
+    def __init__(self, n_steps_in, n_features, n_steps_out,
+                 n_features_reg_out, n_features_cls_out,
+                 default_units=512):
+        super(BaseModel, self).__init__()
+        self.n_steps_in = n_steps_in
+        self.n_features = n_features
+        self.n_steps_out = n_steps_out
+        self.n_features_reg_out = n_features_reg_out
+        self.n_features_cls_out = n_features_cls_out
+        self.default_units = default_units
+
+        self.input_layer = layers.LSTM(default_units, activation='tanh',
+                                       input_shape=(n_steps_in, n_features),
+                                       kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.01),
+                                       )
+        # self.bn_1 = layers.BatchNormalization()
+        self.repvect_layer = layers.RepeatVector(n_steps_out)
+        self.dropout_1 = layers.Dropout(0.25, name='dropout_1')
+
+        self.timed_layer_reg = layers.TimeDistributed(layers.Dense(n_features_reg_out), name='reg_out')
+        self.timed_layer_cls = layers.TimeDistributed(layers.Dense(n_features_cls_out,
+                                                                   activation='sigmoid'), name='cls_out')
+
+    def call(self, inputs, training=False, mask: Any = None) -> Any:
+        x = self.input_layer(inputs)
+        # x = self.bn_1(x, training=training)
+        x = self.repvect_layer(x)
+        x = self.dropout_1(x, training=training)
+
+        output_reg = self.timed_layer_reg(x)
+        output_cls = self.timed_layer_cls(x)
+
         return {'reg_out': output_reg, 'cls_out': output_cls}
 
     def build(self, input_shape):

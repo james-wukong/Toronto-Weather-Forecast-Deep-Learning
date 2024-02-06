@@ -6,7 +6,7 @@ import yaml
 from tensorflow import keras
 from src.weather import *
 from src.helpers import load_df_from_dir, build_print_line
-from src.weather_nn import LSTMLikeModel
+from src.weather_nn import LstmBasedModel
 
 # Configure logging
 # logging.basicConfig(level=logging.DEBUG, filename='weather.log', filemode='w')
@@ -57,9 +57,9 @@ if __name__ == '__main__':
     n_features = len(director.builder.weather.df.columns)
 
     build_print_line('start initialize and configure the model')
-    model = LSTMLikeModel(n_steps_in=n_steps_in, n_features=n_features,
-                          n_steps_out=n_steps_out, n_features_reg_out=len(label_columns['reg']),
-                          n_features_cls_out=len(label_columns['cls']), default_units=1024)
+    model = LstmBasedModel(n_steps_in=n_steps_in, n_features=n_features,
+                           n_steps_out=n_steps_out, n_features_reg_out=len(label_columns['reg']),
+                           n_features_cls_out=len(label_columns['cls']), default_units=1024)
 
     model.compile(
         optimizer=keras.optimizers.legacy.Adam(learning_rate=learning_rate),

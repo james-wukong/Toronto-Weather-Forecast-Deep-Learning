@@ -1,10 +1,15 @@
 import os
 # import logging
 import yaml
+
+import numpy as np
 from tensorflow import keras
+from sklearn.utils.class_weight import compute_class_weight
+from tensorflow.keras.callbacks import TensorBoard
+
 from src.weather import *
 from src.helpers import load_df_from_dir, missing_values, build_print_line
-from src.weather_nn import LSTMLikeModel
+from src.weather_nn import LstmBasedModel
 from src.weather_nn import PrintEpochProgress, EarlyStoppingAtMinLoss, LossAndErrorLoggingCallback
 from src.weather_nn import MultiOutputModelCheckpoint
 
@@ -31,7 +36,7 @@ if __name__ == '__main__':
     # training, validation and testing portions
     train_portion, valid_portion = 0.70, 0.15
     # batch size, epochs and learning rates wrt model
-    batch_size, epochs, learning_rate = 24 * 90, 100, 5e-5
+    batch_size, epochs, learning_rate = 24 * 90, 100, 3e-5
     # load the data from directory
     build_print_line('start loading data from csv files')
     df = load_df_from_dir(cfg['data']['history_weather'])
@@ -63,9 +68,9 @@ if __name__ == '__main__':
     n_features = len(director.builder.weather.df.columns)
 
     build_print_line('start initialize and configure the model')
-    model = LSTMLikeModel(n_steps_in=n_steps_in, n_features=n_features,
-                          n_steps_out=n_steps_out, n_features_reg_out=len(label_columns['reg']),
-                          n_features_cls_out=len(label_columns['cls']), default_units=1024)
+    model = LstmBasedModel(n_steps_in=n_steps_in, n_features=n_features,
+                           n_steps_out=n_steps_out, n_features_reg_out=len(label_columns['reg']),
+                           n_features_cls_out=len(label_columns['cls']), default_units=1024)
 
     model.compile(
         optimizer=keras.optimizers.legacy.Adam(learning_rate=learning_rate),
@@ -95,6 +100,11 @@ if __name__ == '__main__':
     X_test, y_test_reg, y_test_cls = test_element[0].numpy(), test_element[1].numpy(), test_element[2].numpy()
 
     build_print_line('start training the model')
+
+    log_dir = "data/logs/final/"
+    # Create a TensorBoard callback
+    tensorboard_callback = TensorBoard(log_dir=log_dir, histogram_freq=1)
+
     history = model.fit(X_train,
                         {
                             'reg_out': y_train_reg,
