@@ -43,9 +43,9 @@ pip install -r requirements. txt
 
 The model is saved by method model.save_weights('data/models/chkpoint_model'), as a result, only weights are saved.
 
-Basically models have been trained, and we don't have to run training again, because it takes hours to complete.
+Basically all models have been trained, and we don't have to run training again, because it takes hours to complete. However, please feel free to test them and have fun.
 
-We can use 2nd command to load and evaluate the model directly. If you would like to make a prediction, in this case we don't have to input any data, because we are using the last n_step_in (24 * 5) observations to predict n_step_out (24 / 4) hours weather. Consequently, just run the 3rd command to make a prediction.
+We can use 2nd command to load and evaluate the model directly. If you would like to make a prediction, in this case we don't have to input any data, because we are using the last n_step_in (24 * 7) observations to predict n_step_out 6 hours weather. Consequently, just run the 3rd command to make a prediction.
 
 1. to train the model (takes long time):
 
@@ -65,7 +65,7 @@ python main_load.py
 python main_predict.py
 ```
 
-Additionally, if you are interested in performance of BaseModel and GruBasedModel, you could run the following commands:
+Additionally, if you are interested in performance of BaseModel or GruBasedModel, you could run the following commands:
 
 ```sh
 # this will produce the learning curve at the end of evaluation

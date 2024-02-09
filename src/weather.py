@@ -6,6 +6,8 @@ import numpy as np
 import tensorflow as tf
 from sklearn.preprocessing import MultiLabelBinarizer, OneHotEncoder, LabelEncoder
 from sklearn.preprocessing import MinMaxScaler
+from sklearn import metrics
+from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -14,16 +16,21 @@ logging.basicConfig(level=logging.DEBUG, filename='weather.log', filemode='w')
 
 
 class WeatherData:
+
     def __init__(self, df: pd.DataFrame = None):
         self.df = df
 
     def get_feature_index(self, feat_list=None) -> list:
-        feature_indices = [self.df.columns.get_loc(feature) for feature in feat_list]
+        feature_indices = [
+            self.df.columns.get_loc(feature) for feature in feat_list
+        ]
 
         return feature_indices
 
     @staticmethod
-    def display_corr(df: pd.DataFrame = None, win_size: tuple[float, float] = (20, 16)) -> None:
+    def display_corr(
+        df: pd.DataFrame = None,
+        win_size: tuple[float, float] = (20, 16)) -> None:
         """
         display the corr of dataset
         Args:
@@ -104,6 +111,41 @@ class WeatherData:
         """
         sns.boxplot(data=df, x=x, y=y, fill=False, gap=.1)
 
+    @staticmethod
+    def display_confusion_matrix(y_test,
+                                 y_test_hat,
+                                 title='Evaluation Confusion Matrix') -> None:
+        """
+        Plot the confusion matrix from test evaluation
+        :param y_test: true value of y_test
+        :param y_test_hat: predicted probability of y_test
+        :param title:
+        :return:
+        """
+        conf_matrix = confusion_matrix(y_test, y_test_hat)
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(conf_matrix,
+                    annot=True,
+                    fmt="d",
+                    cmap="Blues",
+                    xticklabels=True,
+                    yticklabels=True)
+        plt.title(title)
+        plt.xlabel("Predicted Labels")
+        plt.ylabel("True Labels")
+        plt.show()
+
+    @staticmethod
+    def display_roc_curve(y_test,
+                          y_test_hat,
+                          title='ROC Curve') -> None:
+        fpr, tpr, _ = metrics.roc_curve(y_test, y_test_hat)
+        auc = metrics.roc_auc_score(y_test, y_test_hat)
+        plt.plot(fpr, tpr, label="data 1, auc=" + str(auc))
+        plt.title(title)
+        plt.legend(loc=4)
+        plt.show()
+
 
 class BaseBuilder(ABC):
     """
@@ -133,7 +175,9 @@ class BaseBuilder(ABC):
         pass
 
     @abstractmethod
-    def impute_missing_values(self, col: str, limit_direction='forward') -> None:
+    def impute_missing_values(self,
+                              col: str,
+                              limit_direction='forward') -> None:
         pass
 
     @abstractmethod
@@ -153,7 +197,10 @@ class BaseBuilder(ABC):
         pass
 
     @abstractmethod
-    def convert_numerical_encoding(self, enc, cols=None, fit: bool = False) -> None:
+    def convert_numerical_encoding(self,
+                                   enc,
+                                   cols=None,
+                                   fit: bool = False) -> None:
         pass
 
     @abstractmethod
@@ -209,14 +256,17 @@ class BaseBuilder(ABC):
         pass
 
     @abstractmethod
-    def split_sequence(self, data: pd.DataFrame,
-                       input_win_size: int,
-                       output_win_size: int,
-                       label_columns: defaultdict = None) -> tuple[np.array, np.array]:
+    def split_sequence(
+            self,
+            data: pd.DataFrame,
+            input_win_size: int,
+            output_win_size: int,
+            label_columns: defaultdict = None) -> tuple[np.array, np.array]:
         pass
 
     @abstractmethod
-    def inverse_label_sequence(self, data: tuple,
+    def inverse_label_sequence(self,
+                               data: tuple,
                                label_columns: tuple = None) -> pd.DataFrame:
         pass
 
@@ -230,7 +280,8 @@ class BaseBuilder(ABC):
                           label_columns: defaultdict = None) -> tuple:
         pass
 
-    def unscale_prediction(self, input_win_size: int,
+    def unscale_prediction(self,
+                           input_win_size: int,
                            predictions: pd.DataFrame,
                            label_columns: defaultdict = None) -> np.ndarray:
         pass
@@ -257,12 +308,13 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         self.dataset = None
         self.predict_input = None
         self.predict_input_original = None
-        self.selected_feats = ['temp', 'feelslike', 'dew', 'snowdepth', 'windgust',
-                               'humidity', 'precip', 'precipprob', 'snow',
-                               'windspeed', 'winddir', 'sealevelpressure',
-                               'cloudcover', 'visibility', 'solarradiation',
-                               'severerisk', 'day', 'month', 'year',
-                               'dayofweek', 'weekofyear', 'hour', 'season']
+        self.selected_feats = [
+            'temp', 'feelslike', 'dew', 'snowdepth', 'windgust', 'humidity',
+            'precip', 'precipprob', 'snow', 'windspeed', 'winddir',
+            'sealevelpressure', 'cloudcover', 'visibility', 'solarradiation',
+            'severerisk', 'day', 'month', 'year', 'dayofweek', 'weekofyear',
+            'hour', 'season'
+        ]
 
     # def reset(self) -> None:
     #     self._weather = WeatherData(self._df)
@@ -291,7 +343,8 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         Return:
             df: pd.DataFrame
         """
-        self.weather.df[col_name] = self.weather.df[col_name].astype(to_col_dtype)
+        self.weather.df[col_name] = self.weather.df[col_name].astype(
+            to_col_dtype)
 
     def remove_duplicated(self) -> None:
         """
@@ -312,7 +365,9 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         if cols and isinstance(cols, list):
             self.weather.df = self.weather.df.drop(columns=cols)
 
-    def impute_missing_values(self, col: str, limit_direction='forward') -> None:
+    def impute_missing_values(self,
+                              col: str,
+                              limit_direction='forward') -> None:
         """
         fill in missing values with interpolate
         Args:
@@ -346,13 +401,16 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         """
         mlb = MultiLabelBinarizer()
         self.convert_string_to_set(col)
-        mlb_encoded = pd.DataFrame(mlb.fit_transform(self.weather.df[col]),
-                                   columns=col + '_' + mlb.classes_,
-                                   )
+        mlb_encoded = pd.DataFrame(
+            mlb.fit_transform(self.weather.df[col]),
+            columns=col + '_' + mlb.classes_,
+        )
         self.weather.df = self.weather.df.reset_index(drop=True)
         mlb_encoded = mlb_encoded.reset_index(drop=True)
 
-        self.weather.df = pd.concat([mlb_encoded, self.weather.df.drop(columns=[col], axis=1)], axis=1)
+        self.weather.df = pd.concat(
+            [mlb_encoded,
+             self.weather.df.drop(columns=[col], axis=1)], axis=1)
 
     def convert_categorical_ohe(self, cols=None) -> None:
         """
@@ -370,12 +428,15 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         array_hot_encoded = ohe.fit_transform(self.weather.df[cols]).toarray()
         feature_labels = ohe.categories_
         feature_labels = 'ohe_' + np.array(feature_labels).ravel()
-        data_hot_encoded = pd.DataFrame(array_hot_encoded, columns=feature_labels)
+        data_hot_encoded = pd.DataFrame(array_hot_encoded,
+                                        columns=feature_labels)
 
         self.weather.df = self.weather.df.reset_index(drop=True)
         data_hot_encoded = data_hot_encoded.reset_index(drop=True)
 
-        self.weather.df = pd.concat([data_hot_encoded, self.weather.df.drop(cols, axis=1)], axis=1)
+        self.weather.df = pd.concat(
+            [data_hot_encoded,
+             self.weather.df.drop(cols, axis=1)], axis=1)
 
     def convert_categorical_le(self, cols=None) -> None:
         """
@@ -387,7 +448,8 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
 
         """
         le = LabelEncoder()
-        self.weather.df[cols] = self.weather.df[cols].apply(lambda col: le.fit_transform(col))
+        self.weather.df[cols] = self.weather.df[cols].apply(
+            lambda col: le.fit_transform(col))
 
     def convert_cat2num_infer(self, enc, cols=None) -> None:
         """
@@ -398,7 +460,10 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         """
         pass
 
-    def convert_numerical_encoding(self, enc, cols=None, fit: bool = False) -> None:
+    def convert_numerical_encoding(self,
+                                   enc,
+                                   cols=None,
+                                   fit: bool = False) -> None:
         """
         convert numerical columns into normalization or standardization form
         Args:
@@ -422,8 +487,7 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         Returns:
             df: DataFrame with missing values
         """
-        return (self.weather.df.isnull().sum()
-                .sort_values(ascending=False))
+        return (self.weather.df.isnull().sum().sort_values(ascending=False))
 
     def remove_col_white_space_l(self, col: str) -> None:
         """
@@ -457,8 +521,7 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
 
         """
         self.weather.df[col] = self.weather.df[col].apply(
-            lambda data: str(data).replace(' ', '')
-        )
+            lambda data: str(data).replace(' ', ''))
 
     def convert_to_datetime(self, col: str = 'datetime') -> None:
         """
@@ -470,7 +533,8 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
 
         """
         if not pd.api.types.is_datetime64_dtype(self.weather.df.datetime):
-            self.weather.df[col] = pd.to_datetime(self.weather.df[col], errors='coerce')
+            self.weather.df[col] = pd.to_datetime(self.weather.df[col],
+                                                  errors='coerce')
 
     def add_year_month_day_feats(self, col: str = 'datetime') -> None:
         """
@@ -519,8 +583,7 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         """
 
         self.weather.df['weekofyear'] = self.weather.df[col].apply(
-            lambda date: date.isocalendar().week if pd.notna(date) else pd.NaT
-        )
+            lambda date: date.isocalendar().week if pd.notna(date) else pd.NaT)
 
     def convert_string_to_set(self, col: str) -> None:
         """
@@ -532,8 +595,7 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
 
         """
         self.weather.df[col] = self.weather.df[col].apply(
-            lambda data: list(set(str(data).replace(' ', '').split(',')))
-        )
+            lambda data: list(set(str(data).replace(' ', '').split(','))))
 
     def add_season_feat(self, col: str = 'datetime') -> None:
         """
@@ -582,10 +644,13 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         """
         self.weather.df.sort_values(by=col, ascending=sort, inplace=True)
 
-    def split_sequence(self, data: pd.DataFrame,
-                       input_win_size: int,
-                       output_win_size: int,
-                       label_columns: defaultdict = None) -> tuple[np.array, np.array, np.array]:
+    def split_sequence(
+        self,
+        data: pd.DataFrame,
+        input_win_size: int,
+        output_win_size: int,
+        label_columns: defaultdict = None
+    ) -> tuple[np.array, np.array, np.array]:
         """
         split data into feature sequences and label sequences with time steps
         Args:
@@ -601,10 +666,12 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         for i in range(len(data) - input_win_size - output_win_size + 1):
             seq = data.iloc[i:i + input_win_size, :].values
             if label_columns is not None:
-                label_reg = (data.iloc[i + input_win_size:i + input_win_size + output_win_size,
-                             data.columns.get_indexer(label_columns['reg'])].values)
-                label_cls = (data.iloc[i + input_win_size:i + input_win_size + output_win_size,
-                             data.columns.get_indexer(label_columns['cls'])].values)
+                label_reg = (data.iloc[
+                    i + input_win_size:i + input_win_size + output_win_size,
+                    data.columns.get_indexer(label_columns['reg'])].values)
+                label_cls = (data.iloc[
+                    i + input_win_size:i + input_win_size + output_win_size,
+                    data.columns.get_indexer(label_columns['cls'])].values)
                 labels_reg.append(label_reg)
                 labels_cls.append(label_cls)
             sequences.append(seq)
@@ -613,7 +680,8 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
                 np.array(labels_reg, dtype=np.float32),
                 np.array(labels_cls, dtype=np.float32))
 
-    def inverse_label_sequence(self, y_data_hat: np.array,
+    def inverse_label_sequence(self,
+                               y_data_hat: np.array,
                                label_columns: tuple = None) -> pd.DataFrame:
         """
         inverse split sequence and generate an original dataset
@@ -635,7 +703,8 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
 
         return result
 
-    def create_train_test(self, input_win_size: int,
+    def create_train_test(self,
+                          input_win_size: int,
                           output_win_size: int,
                           train_size: float = 0.8,
                           validate_size: float = 0.1,
@@ -661,23 +730,30 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         train_data = self.weather.df.iloc[:train_size]
         val_data = self.weather.df.iloc[train_size:train_size + val_size]
         test_data = self.weather.df.iloc[train_size + val_size:]
-        self.predict_input_original = self.weather.df.iloc[-1 * input_win_size:, self.weather.df.columns.get_indexer(
-            label_columns['reg'] + label_columns['cls'])]
+        self.predict_input_original = self.weather.df.iloc[
+            -1 * input_win_size:,
+            self.weather.df.columns.get_indexer(label_columns['reg'] +
+                                                label_columns['cls'])]
+        # test_data.to_csv('test_data.csv', columns=['temp', 'feelslike', 'year', 'month', 'day', 'hour', 'season'])
 
-        # scaler = StandardScaler()
-        # scaler = MinMaxScaler()
-        selected_feats_indices = self.weather.df.columns.get_indexer(self.selected_feats)
+        selected_feats_indices = self.weather.df.columns.get_indexer(
+            self.selected_feats)
         # self.weather.df.iloc[-30:, selected_feats_indices].to_csv('test_data.csv', sep=',')
         # 2. scaling numerical features for all datasets
-        train_data.iloc[:, selected_feats_indices] = self.scaler.fit_transform(train_data[self.selected_feats])
-        val_data.iloc[:, selected_feats_indices] = self.scaler.transform(val_data[self.selected_feats])
-        test_data.iloc[:, selected_feats_indices] = self.scaler.transform(test_data[self.selected_feats])
-        self.dataset = pd.concat([train_data, val_data, test_data], ignore_index=True)
+        train_data.iloc[:, selected_feats_indices] = self.scaler.fit_transform(
+            train_data[self.selected_feats])
+        val_data.iloc[:, selected_feats_indices] = self.scaler.transform(
+            val_data[self.selected_feats])
+        test_data.iloc[:, selected_feats_indices] = self.scaler.transform(
+            test_data[self.selected_feats])
+        self.dataset = pd.concat([train_data, val_data, test_data],
+                                 ignore_index=True)
         # self.dataset.iloc[-30:, selected_feats_indices].to_csv('scaled data.csv', sep=',')
-        self.predict_input, _, _ = self.split_sequence(self.dataset.iloc[-1 * input_win_size:],
-                                                       input_win_size,
-                                                       output_win_size=0,
-                                                       label_columns=None)
+        self.predict_input, _, _ = self.split_sequence(
+            self.dataset.iloc[-1 * input_win_size:],
+            input_win_size,
+            output_win_size=0,
+            label_columns=None)
 
         # print('train_data shape: ', train_data.shape)
         # print('val_data: ', val_data.shape)
@@ -688,44 +764,46 @@ class ConcreteBuilderWeather(BaseBuilder, ABC):
         # train_data.to_csv('X_train.csv', sep=',')
 
         # 3. split datasets into sequences wrt n_step_in, and n_step_out
-        X_train, y_train_reg, y_train_cls = self.split_sequence(train_data,
-                                                                input_win_size,
-                                                                output_win_size,
-                                                                label_columns)
-        X_val, y_val_reg, y_val_cls = self.split_sequence(val_data,
-                                                          input_win_size,
-                                                          output_win_size,
-                                                          label_columns)
-        X_test, y_test_reg, y_test_cls = self.split_sequence(test_data,
-                                                             input_win_size,
-                                                             output_win_size,
-                                                             label_columns)
-        self.y_test_reg_ds, self.y_test_cls_ds = y_test_reg.copy(), y_test_cls.copy()
+        X_train, y_train_reg, y_train_cls = self.split_sequence(
+            train_data, input_win_size, output_win_size, label_columns)
+        X_val, y_val_reg, y_val_cls = self.split_sequence(
+            val_data, input_win_size, output_win_size, label_columns)
+        X_test, y_test_reg, y_test_cls = self.split_sequence(
+            test_data, input_win_size, output_win_size, label_columns)
+        self.y_test_reg_ds, self.y_test_cls_ds = y_test_reg.copy(
+        ), y_test_cls.copy()
+        # np.savetxt('X_test.csv', X_test, delimiter=",")
         # print('X_train: ', X_train.shape, 'y_train_reg: ', y_train_reg.shape)
         # print('X_val: ', X_val.shape, 'y_val_reg: ', y_val_reg.shape)
         # print('X_test: ', X_test.shape, 'y_test_reg: ', y_test_reg.shape)
 
         # 4. batch and shuffle datasets and load them into tensors
-        train_dataset = (tf.data.Dataset.from_tensor_slices((X_train, y_train_reg, y_train_cls)).batch(batch_size)
-                         .shuffle(len(X_train)))
-        val_dataset = tf.data.Dataset.from_tensor_slices((X_val, y_val_reg, y_val_cls)).batch(batch_size)
-        test_dataset = tf.data.Dataset.from_tensor_slices((X_test, y_test_reg, y_test_cls)).batch(batch_size)
+        train_dataset = (tf.data.Dataset.from_tensor_slices(
+            (X_train, y_train_reg,
+             y_train_cls)).batch(batch_size).shuffle(len(X_train)))
+        val_dataset = tf.data.Dataset.from_tensor_slices(
+            (X_val, y_val_reg, y_val_cls)).batch(batch_size)
+        test_dataset = tf.data.Dataset.from_tensor_slices(
+            (X_test, y_test_reg, y_test_cls)).batch(batch_size)
 
         # return (X_train, y_train), (X_val, y_val), (X_test, y_test)
         return train_dataset, val_dataset, test_dataset
 
-    def unscale_prediction(self, input_win_size: int,
+    def unscale_prediction(self,
+                           input_win_size: int,
                            predictions: pd.DataFrame,
                            label_columns: defaultdict = None) -> np.ndarray:
         result = np.ndarray
-        selected_label_indices = [self.selected_feats.index(label) for label in label_columns['reg']]
+        selected_label_indices = [
+            self.selected_feats.index(label) for label in label_columns['reg']
+        ]
         if not self.dataset.empty:
             empty_ds = np.empty((len(predictions), len(self.selected_feats)))
             empty_ds[:, :] = np.nan
             empty_ds[:len(predictions), selected_label_indices] = predictions
 
             result = self.scaler.inverse_transform(empty_ds)
-            np.savetxt('prediction inverse result.csv', result, delimiter=',')
+            # np.savetxt('prediction inverse result.csv', result, delimiter=',')
 
         return result[:, selected_label_indices]
 
@@ -749,7 +827,7 @@ class Director:
     def builder(self, builder: BaseBuilder) -> None:
         """
         The Director works with any builder instance that the client code passes
-        to it. This way, the client code may alter the final type of the newly
+        to it. This way, the client code may alter the lstm type of the newly
         assembled product.
         """
         self._builder = builder
@@ -765,10 +843,10 @@ class Director:
         self.builder.impute_missing_values('snowdepth')
         self.builder.impute_missing_values('sealevelpressure')
         self.builder.impute_missing_values_single('severerisk')
-        self.builder.impute_missing_values_single('visibility',
-                                                  value=self.builder.weather.df['visibility'].mean())
-        self.builder.impute_missing_values_single('windgust',
-                                                  value=self.builder.weather.df['windgust'].mean())
+        self.builder.impute_missing_values_single(
+            'visibility', value=self.builder.weather.df['visibility'].mean())
+        self.builder.impute_missing_values_single(
+            'windgust', value=self.builder.weather.df['windgust'].mean())
         # 3. change datetime column dtypes, sort the data by date
         self.builder.convert_to_datetime('datetime')
         # 4. Convert categorical features to numerical

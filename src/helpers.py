@@ -22,7 +22,8 @@ def load_df_from_dir(data_dir: str = '') -> pd.DataFrame:
     # Horizontally concatenate the DataFrames
     combined_df = pd.concat(data_frames, axis=0, ignore_index=True)
     # Convert 'datetime' column to datetime type
-    combined_df['datetime'] = pd.to_datetime(combined_df['datetime'], errors='coerce')
+    combined_df['datetime'] = pd.to_datetime(combined_df['datetime'],
+                                             errors='coerce')
     # Sort by the 'datetime' column
     combined_df.sort_values(by='datetime', inplace=True)
     # Reset the index if needed
@@ -32,7 +33,9 @@ def load_df_from_dir(data_dir: str = '') -> pd.DataFrame:
     return combined_df
 
 
-def build_print_line(txt: str, symbol: str = '-', repeat_times: int = 20) -> None:
+def build_print_line(txt: str,
+                     symbol: str = '-',
+                     repeat_times: int = 20) -> None:
     print(f'{symbol*repeat_times}{txt}{symbol*repeat_times}')
 
 

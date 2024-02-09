@@ -3,7 +3,22 @@ saved_models:
   weights_model: data/models/weights_model/
   chkpoint_model: data/models/chkpoint_model/
   base_chkpoint_model: data/models/base_chkpoint_model/
-  gru_chkpoint_model: data/models/base_chkpoint_model/
+  gru_chkpoint_model: data/models/gru_chkpoint_model/
 
 data:
   history_weather: data/weather/
+
+logs:
+  base_tensor_board: data/logs/base/
+  lstm_tensor_board: data/logs/lstm/
+  gru_tensor_board: data/logs/gru/
+
+param:
+  n_step_in: 168
+  n_step_out: 6
+  train_portion: 0.7
+  valid_portion: 0.15
+  batch_size: 2160
+  learning_rate: 5e-5
+  epochs: 1000
+  threshold: 0.48
