@@ -14,6 +14,7 @@ It uses weather data in previous days to forecasting the weather conditions in t
 - data/models: contains weights saved from different models
 - data/images: learning curve images from models
 - data/logs: saved tensor board data
+- docs: report for this project
 - src: modules and helper function written for this project
 - tests: test cases for this project (don't have much time enriching test cases)
 
